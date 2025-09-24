@@ -1,4 +1,5 @@
-﻿import { createContext, useContext, useState, useEffect } from 'react'
+﻿﻿﻿﻿import { createContext, useContext, useState, useEffect } from 'react'
+import { API_BASE_URL } from '../config/api'
 
 const AuthContext = createContext()
 
@@ -14,8 +15,6 @@ export const AuthProvider = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false)
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
-
-    const API_BASE_URL = 'http://127.0.0.1:5000/api'
 
     // Check if user is already logged in on app start
     useEffect(() => {

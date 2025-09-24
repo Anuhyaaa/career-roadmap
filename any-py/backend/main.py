@@ -37,23 +37,28 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production-2024')
 
 # Session configuration for development
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True  # Keep this True for security
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Allow cross-origin requests in development
+app.config['SESSION_COOKIE_SECURE'] = False  # Must be False for HTTP (development)
+app.config['SESSION_COOKIE_HTTPONLY'] = False  # Set to False to allow JavaScript access
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Lax allows some cross-origin requests
 app.config['SESSION_COOKIE_DOMAIN'] = None  # Let Flask handle domain automatically
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # Session expires in 24 hours
 
 # Enable CORS for frontend
 allowed_origins = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
-    'http://127.0.0.1:3000'
+    'http://127.0.0.1:3000',
+    'http://localhost:5174',
+    'https://*.vercel.app',  # Allow all Vercel deployments
+    os.environ.get('FRONTEND_URL', 'http://localhost:5173')  # Allow custom frontend URL
 ]
 CORS(app, 
      origins=allowed_origins, 
      supports_credentials=True,
-     allow_headers=['Content-Type', 'Authorization'],
-     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+     allow_headers=['Content-Type', 'Authorization', 'Cookie'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     expose_headers=['Set-Cookie'])
 
 # MongoDB connection
 MONGO_URI = os.environ.get('MONGO_URI', "mongodb+srv://anuhya:anuhya123@cluster0.1yxhld9.mongodb.net/career?retryWrites=true&w=majority&appName=Cluster0")
@@ -148,6 +153,26 @@ def get_current_user():
         logger.error(f"Error getting current user: {str(e)}")
         return None
 
+# Root route for health check
+@app.route('/')
+def home():
+    """Root endpoint for health check"""
+    return jsonify({
+        'message': 'Career Roadmap Generator API',
+        'status': 'running',
+        'version': '1.0.0'
+    })
+
+# Health check endpoint
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'database': 'connected' if test_connection() else 'disconnected',
+        'timestamp': datetime.utcnow().isoformat()
+    })
+
 # AI Service Functions
 def construct_ai_prompt(form_data: Dict[str, Any]) -> str:
     """Construct the comprehensive prompt for Gemini 2.5 Flash AI model"""
@@ -233,147 +258,24 @@ Important: Return ONLY the JSON object, no markdown formatting or additional tex
     
     return prompt
 
-def validate_and_enhance_roadmap(roadmap_data: Dict[str, Any], form_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and enhance the roadmap data with fallbacks if needed"""
-    
-    # Define fallback data based on form input
-    interests = form_data.get('interests', 'technology')
-    career_goal = form_data.get('careerGoal', 'professional development')
-    
-    # Ensure all required fields exist with fallbacks
-    if 'skill_path' not in roadmap_data or not roadmap_data['skill_path']:
-        roadmap_data['skill_path'] = [
-            {
-                "name": "Foundation Skills",
-                "description": f"Build fundamental skills in {interests}",
-                "prerequisites": [],
-                "estimated_duration_weeks": 4
-            },
-            {
-                "name": "Intermediate Concepts",
-                "description": f"Develop intermediate knowledge in {interests}",
-                "prerequisites": ["Foundation Skills"],
-                "estimated_duration_weeks": 6
-            }
-        ]
-    
-    if 'platforms' not in roadmap_data or not roadmap_data['platforms']:
-        roadmap_data['platforms'] = [
-            {
-                "name": "Coursera",
-                "type": "Online Learning Platform",
-                "rationale": "Offers university-level courses with certificates"
-            },
-            {
-                "name": "YouTube",
-                "type": "Free Video Platform",
-                "rationale": "Free tutorials and practical demonstrations"
-            }
-        ]
-    
-    if 'certifications' not in roadmap_data or not roadmap_data['certifications']:
-        roadmap_data['certifications'] = [
-            {
-                "name": "Professional Certificate",
-                "provider": "Industry Leaders",
-                "level": "Intermediate",
-                "rationale": f"Validates expertise in {interests}"
-            }
-        ]
-    
-    if 'project_ideas' not in roadmap_data or not roadmap_data['project_ideas']:
-        roadmap_data['project_ideas'] = {
-            "beginner": [
-                {
-                    "title": "Basic Portfolio Project",
-                    "description": f"Create a simple project showcasing {interests} skills",
-                    "learning_objectives": ["Practical application", "Portfolio building"]
-                }
-            ],
-            "intermediate": [
-                {
-                    "title": "Intermediate Application",
-                    "description": f"Build a more complex application in {interests}",
-                    "learning_objectives": ["Advanced concepts", "Problem solving"]
-                }
-            ],
-            "advanced": [
-                {
-                    "title": "Advanced Capstone Project",
-                    "description": f"Comprehensive project demonstrating mastery of {interests}",
-                    "learning_objectives": ["System design", "Best practices"]
-                }
-            ]
-        }
-    
-    if 'timeline' not in roadmap_data or not roadmap_data['timeline']:
-        roadmap_data['timeline'] = [
-            {
-                "phase_number": 1,
-                "title": "Foundation Phase",
-                "duration_weeks": 8,
-                "focus_skills": ["Fundamentals"],
-                "milestones": ["Complete basic concepts", "Build first project"]
-            },
-            {
-                "phase_number": 2,
-                "title": "Development Phase",
-                "duration_weeks": 12,
-                "focus_skills": ["Advanced concepts"],
-                "milestones": ["Master intermediate skills", "Create portfolio"]
-            }
-        ]
-    
-    if 'notes' not in roadmap_data or not roadmap_data['notes']:
-        roadmap_data['notes'] = [
-            "Stay consistent with your learning schedule",
-            "Build projects to reinforce theoretical knowledge",
-            "Join relevant communities and network with professionals",
-            "Keep your skills updated with industry trends",
-            f"Focus on practical applications of {interests} in real-world scenarios"
-        ]
-    
-    # Validate data integrity
-    for field in ['skill_path', 'platforms', 'certifications', 'timeline']:
-        if not isinstance(roadmap_data.get(field), list):
-            logger.warning(f"Field {field} is not a list, converting")
-            roadmap_data[field] = []
-    
-    # Ensure project_ideas has the correct structure
-    if not isinstance(roadmap_data.get('project_ideas'), dict):
-        roadmap_data['project_ideas'] = {"beginner": [], "intermediate": [], "advanced": []}
-    else:
-        for level in ['beginner', 'intermediate', 'advanced']:
-            if level not in roadmap_data['project_ideas'] or not isinstance(roadmap_data['project_ideas'][level], list):
-                roadmap_data['project_ideas'][level] = []
-    
-    logger.info(f"Roadmap validation complete. Fields: {list(roadmap_data.keys())}")
-    return roadmap_data
-
 def generate_roadmap_with_ai(form_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate career roadmap using Google Gemini 2.5 Flash AI"""
+    """Generate career roadmap using Google Gemini AI"""
     try:
-        if not gemini_client:
-            raise Exception("Gemini client is not initialized. Check API key.")
-
         prompt = construct_ai_prompt(form_data)
         
+        # Generate content using Gemini
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.7,
-                candidate_count=1,
-                max_output_tokens=8000,
-                stop_sequences=["```", "---", "END_ROADMAP"]
-            )
+            model='gemini-1.5-flash',
+            contents=prompt
         )
         
         if not response.text:
             raise Exception("Empty response from AI model")
         
+        # Clean the response text
         response_text = response.text.strip()
         
+        # Remove any markdown code block formatting
         if response_text.startswith('```json'):
             response_text = response_text[7:]
         if response_text.startswith('```'):
@@ -383,6 +285,7 @@ def generate_roadmap_with_ai(form_data: Dict[str, Any]) -> Dict[str, Any]:
         
         response_text = response_text.strip()
         
+        # Parse JSON
         try:
             roadmap_data = json.loads(response_text)
         except json.JSONDecodeError as e:
@@ -390,7 +293,11 @@ def generate_roadmap_with_ai(form_data: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"Response text: {response_text}")
             raise Exception("Invalid JSON response from AI model")
         
-        roadmap_data = validate_and_enhance_roadmap(roadmap_data, form_data)
+        # Validate required fields
+        required_fields = ['skill_path', 'platforms', 'certifications', 'project_ideas', 'timeline', 'notes']
+        for field in required_fields:
+            if field not in roadmap_data:
+                logger.warning(f"Missing field {field} in AI response")
         
         return roadmap_data
         
@@ -399,27 +306,10 @@ def generate_roadmap_with_ai(form_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    try:
-        # Test database connection
-        mongo_client.admin.command('ping')
-        db_status = 'connected'
-    except Exception as e:
-        logger.error(f"Database health check failed: {str(e)}")
-        db_status = 'disconnected'
-    
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'database': db_status,
-        'version': '1.0.0'
-    })
-
+# Main roadmap generation endpoint
 @app.route('/api/generate-roadmap', methods=['POST'])
 def generate_roadmap():
-    """Generate career roadmap using AI"""
+    """Generate a career roadmap based on user input"""
     try:
         data = request.get_json()
         
@@ -427,30 +317,22 @@ def generate_roadmap():
             return jsonify({'error': 'No data provided'}), 400
         
         # Validate required fields
-        required_fields = ['interests', 'education']
-        missing_fields = [field for field in required_fields if not data.get(field)]
+        required_fields = ['interests', 'careerGoal']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'error': f'{field} is required'}), 400
         
-        if missing_fields:
-            return jsonify({
-                'error': 'Missing required fields',
-                'missing_fields': missing_fields
-            }), 400
+        # Get current user if authenticated
+        current_user = get_current_user()
+        user_id = ObjectId(current_user['id']) if current_user else None
         
         # Generate unique request ID
         request_id = str(uuid.uuid4())
         
-        # Get current user (if authenticated)
-        current_user = get_current_user()
-        user_id = current_user['id'] if current_user else None
-        
-        logger.info(f"Current user: {current_user}")
-        logger.info(f"Session: {dict(session)}")
-        logger.info(f"User ID: {user_id}")
-        
-        # Save request to database
+        # Store the request
         request_doc = {
             'request_id': request_id,
-            'user_id': ObjectId(user_id) if user_id else None,
+            'user_id': user_id,
             'form_data': data,
             'created_at': datetime.utcnow(),
             'status': 'processing'
@@ -458,92 +340,64 @@ def generate_roadmap():
         
         roadmap_requests_collection.insert_one(request_doc)
         
-        try:
-            # Generate roadmap using AI
-            logger.info(f"Generating roadmap for request {request_id}")
-            roadmap_data = generate_roadmap_with_ai(data)
-            
-            # Save roadmap to database
-            roadmap_doc = {
-                'request_id': request_id,
-                'user_id': ObjectId(user_id) if user_id else None,
-                'roadmap_data': roadmap_data,
-                'created_at': datetime.utcnow()
-            }
-            
-            result = roadmaps_collection.insert_one(roadmap_doc)
-            
-            # Update request status
-            roadmap_requests_collection.update_one(
-                {'request_id': request_id},
-                {'$set': {'status': 'completed', 'completed_at': datetime.utcnow()}}
-            )
-            
-            # Return the generated roadmap
-            response_data = {
-                'request_id': request_id,
-                'roadmap_id': str(result.inserted_id),
-                'roadmap': roadmap_data,
-                'user_authenticated': current_user is not None,
-                'saved': current_user is not None
-            }
-            
-            logger.info(f"Successfully generated roadmap for request {request_id}")
-            return jsonify(response_data)
-            
-        except Exception as e:
-            # Update request status to failed
-            roadmap_requests_collection.update_one(
-                {'request_id': request_id},
-                {'$set': {'status': 'failed', 'error': str(e), 'failed_at': datetime.utcnow()}}
-            )
-            raise
+        # Generate roadmap with AI
+        roadmap_data = generate_roadmap_with_ai(data)
         
-    except Exception as e:
-        logger.error(f"Error generating roadmap: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Store the generated roadmap
+        roadmap_doc = {
+            'request_id': request_id,
+            'user_id': user_id,
+            'roadmap_data': roadmap_data,
+            'created_at': datetime.utcnow()
+        }
+        
+        result = roadmaps_collection.insert_one(roadmap_doc)
+        roadmap_id = str(result.inserted_id)
+        
+        # Update request status
+        roadmap_requests_collection.update_one(
+            {'request_id': request_id},
+            {
+                '$set': {
+                    'status': 'completed',
+                    'completed_at': datetime.utcnow(),
+                    'roadmap_id': roadmap_id
+                }
+            }
+        )
+        
+        logger.info(f"Roadmap generated successfully: {roadmap_id} for user: {user_id}")
+        
         return jsonify({
-            'error': 'Failed to generate roadmap',
-            'details': str(e)
-        }), 500
-
-# Helper functions for MongoDB
-def get_current_user():
-    """Get current user from session"""
-    try:
-        user_id = session.get('user_id')
-        if not user_id:
-            return None
+            'request_id': request_id,
+            'roadmap_id': roadmap_id,
+            'roadmap': roadmap_data,
+            'saved': user_id is not None,
+            'user_authenticated': current_user is not None
+        })
         
-        user = users_collection.find_one({'_id': ObjectId(user_id)})
-        if user:
-            user['id'] = str(user['_id'])
-            user.pop('_id', None)
-        
-        return user
     except Exception as e:
-        logger.error(f"Error getting current user: {str(e)}")
-        return None
-
-
-
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Endpoint not found'}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
-
-@app.errorhandler(400)
-def bad_request(error):
-    return jsonify({'error': 'Bad request'}), 400
+        logger.error(f"Roadmap generation error: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Update request status to failed if we have a request_id
+        if 'request_id' in locals():
+            roadmap_requests_collection.update_one(
+                {'request_id': request_id},
+                {
+                    '$set': {
+                        'status': 'failed',
+                        'error': str(e),
+                        'failed_at': datetime.utcnow()
+                    }
+                }
+            )
+        
+        return jsonify({'error': 'Failed to generate roadmap'}), 500
 
 if __name__ == '__main__':
-    if not test_connection():
-        logger.critical("Cannot start server - database connection failed")
-        exit(1)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
     
     logger.info("Starting Flask server...")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=port, debug=debug)

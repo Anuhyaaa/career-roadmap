@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { API_BASE_URL } from '../config/api'
 import {
     Calendar,
     Clock,
@@ -23,8 +24,6 @@ const History = () => {
     const [roadmaps, setRoadmaps] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-
-    const API_BASE_URL = 'http://127.0.0.1:5000/api'
 
     useEffect(() => {
         if (isAuthenticated) {

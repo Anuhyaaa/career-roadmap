@@ -2,7 +2,7 @@
 Authentication and User Management Routes
 """
 
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo import MongoClient
 from bson.objectid import ObjectId
@@ -83,6 +83,7 @@ def register():
         result = users_collection.insert_one(user_doc)
         
         # Create session
+        session.permanent = True
         session['user_id'] = str(result.inserted_id)
         session['user_email'] = email
         
@@ -96,10 +97,12 @@ def register():
         
         logger.info(f"New user registered: {email}")
         
-        return jsonify({
+        response = make_response(jsonify({
             'message': 'Registration successful',
             'user': user_data
-        }), 201
+        }), 201)
+        
+        return response
         
     except Exception as e:
         logger.error(f"Registration error: {str(e)}")
@@ -142,6 +145,7 @@ def login():
         )
         
         # Create session
+        session.permanent = True
         session['user_id'] = str(user['_id'])
         session['user_email'] = email
         
@@ -155,11 +159,15 @@ def login():
         }
         
         logger.info(f"User logged in: {email}")
+        logger.info(f"Session created with user_id: {session['user_id']}")
+        logger.info(f"Session data after login: {dict(session)}")
         
-        return jsonify({
+        response = make_response(jsonify({
             'message': 'Login successful',
             'user': user_data
-        })
+        }))
+        
+        return response
         
     except Exception as e:
         logger.error(f"Login error: {str(e)}")

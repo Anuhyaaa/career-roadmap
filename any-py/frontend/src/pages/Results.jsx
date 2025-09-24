@@ -1,5 +1,6 @@
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import { API_BASE_URL } from '../config/api'
 import {
     Download,
     BookOpen,
@@ -24,7 +25,6 @@ const Results = () => {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
 
-    const API_BASE_URL = 'http://127.0.0.1:5000/api'
     const roadmapId = searchParams.get('roadmap_id')
 
     useEffect(() => {
